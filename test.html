@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 搖桿控制</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        #joystick {
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background-color: #ccc;
+            position: relative;
+        }
+        #handle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: #ff5722;
+            position: absolute;
+            top: 110px;
+            left: 110px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="joystick">
+    <div id="handle"></div>
+</div>
+
+<script>
+    const handle = document.getElementById('handle');
+    const joystick = document.getElementById('joystick');
+    let isDragging = false;
+    let initialX, initialY;
+
+    joystick.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        const touch = e.touches[0];
+        initialX = touch.clientX - handle.offsetLeft;
+        initialY = touch.clientY - handle.offsetTop;
+    });
+
+    joystick.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        const touch = e.touches[0];
+        let x = touch.clientX - initialX;
+        let y = touch.clientY - initialY;
+
+        const maxDistance = 100;  // 搖桿最大移動距離
+        const distance = Math.sqrt(x * x + y * y);
+
+        if (distance > maxDistance) {
+            const ratio = maxDistance / distance;
+            x *= ratio;
+            y *= ratio;
+        }
+
+        handle.style.left = `${x + 110}px`;
+        handle.style.top = `${y + 110}px`;
+
+        // 根據搖桿位置計算指令並發送到 ESP32
+        sendCommand(x, y);
+    });
+
+    joystick.addEventListener('touchend', () => {
+        isDragging = false;
+        handle.style.left = '110px';
+        handle.style.top = '110px';
+        sendCommand(0, 0);  // 搖桿歸位，停止移動
+    });
+
+    function sendCommand(x, y) {
+        const maxDistance = 100;
+        const command = { direction: "", speed: 0 };
+
+        if (y < -50) {
+            command.direction = "forward";
+        } else if (y > 50) {
+            command.direction = "backward";
+        } else if (x < -50) {
+            command.direction = "left";
+        } else if (x > 50) {
+            command.direction = "right";
+        } else {
+            command.direction = "stop";
+        }
+
+        // 計算速度，距離越遠速度越快
+        command.speed = Math.min(Math.sqrt(x * x + y * y) / maxDistance, 1) * 255;
+
+        // 發送請求到 ESP32
+        const esp32IP = "http://192.168.4.1"; // 替換為您的 ESP32 IP 地址
+        fetch(`${esp32IP}/${command.direction}?speed=${command.speed}`)
+            .then(response => console.log('Command sent:', command))
+            .catch(error => console.error('Error:', error));
+    }
+</script>
+
+</body>
+</html>
